@@ -1,0 +1,325 @@
+diff --git a/ggml/src/ggml-metal/kernels/fa_aux.metal b/ggml/src/ggml-metal/kernels/fa_aux.metal
+index ebee1be..543c835 100644
+--- a/ggml/src/ggml-metal/kernels/fa_aux.metal
++++ b/ggml/src/ggml-metal/kernels/fa_aux.metal
+@@ -364,6 +364,42 @@ kernel void kernel_lightning_indexer(
+     const int i_kv_0   = tgpig.x*NK;            // first key of this threadgroup
+     const int i_kv     = i_kv_0 + sgitg*NKPSG;  // first key of this simdgroup
+ 
++    // Skip hidden tiles before score arithmetic can propagate NaN/Inf or overflow during half staging.
++    const int i_batch_0 = tgpig.y*NBPTG;
++    const int n_batch   = min((int) NBPTG, args.n_batch - i_batch_0);
++
++    static_assert(NBPTG == NSG, "one simdgroup per query");
++    threadgroup bool visible[NBPTG];
++    bool live = false;
++    if (sgitg < n_batch) {
++        device const half * pm = (device const half *) (m + (i_batch_0 + sgitg)*args.nbm1 + (i_stream % args.mask_ne3)*args.nbm3);
++        for (short ik = tiisg; ik < NK; ik += 32) {
++            if (i_kv_0 + ik < args.n_kv) {
++                live |= as_type<ushort>(pm[i_kv_0 + ik]) != 0xfc00;
++            }
++        }
++    }
++    const bool any_live = simd_any(live);
++    if (tiisg == 0) {
++        visible[sgitg] = any_live;
++    }
++    threadgroup_barrier(mem_flags::mem_threadgroup);
++
++    bool tile_live = false;
++    for (short ib = 0; ib < n_batch; ++ib) {
++        tile_live |= visible[ib];
++    }
++    if (!tile_live) {
++        for (short i = tiitg; i < n_batch*NK; i += NTG) {
++            const int ik = i_kv_0 + i%NK;
++            if (ik < args.n_kv) {
++                device float * pd = (device float *) (dst + (i_batch_0 + i/NK)*args.nb1 + i_stream*args.nb3);
++                pd[ik] = -INFINITY;
++            }
++        }
++        return;
++    }
++
+     threadgroup half sk[NK * DK16 * 16];
+     threadgroup half4x4 * sk4x4 = (threadgroup half4x4 *) sk;
+ 
+@@ -401,12 +437,18 @@ kernel void kernel_lightning_indexer(
+     threadgroup float sw [NHPTG];
+     threadgroup float sqk[NSG*NHPTG*NKPSG];
+ 
+-    const int i_batch_0 = tgpig.y*NBPTG;
+-    const int n_batch   = min((int) NBPTG, args.n_batch - i_batch_0);
+-
+     for (short ib = 0; ib < n_batch; ++ib) {
+         const int i_batch = i_batch_0 + ib;
+ 
++        if (!visible[ib]) {
++            const int ik = i_kv + tiisg;
++            if (tiisg < NKPSG && ik < args.n_kv) {
++                device float * pd = (device float *) (dst + i_batch*args.nb1 + i_stream*args.nb3);
++                pd[ik] = -INFINITY;
++            }
++            continue;
++        }
++
+         device const char * pq = q + i_batch*args.nbq2 + i_stream*args.nbq3;
+         device const char * pw = w + i_batch*args.nbw1 + i_stream*args.nbw3;
+ 
+@@ -463,7 +505,8 @@ kernel void kernel_lightning_indexer(
+                 device const half  * pm = (device const half  *) (m   + i_batch*args.nbm1 + (i_stream % args.mask_ne3)*args.nbm3);
+                 device       float * pd = (device       float *) (dst + i_batch*args.nb1  + i_stream*args.nb3);
+ 
+-                pd[ik] = score + (float) pm[ik];
++                const float mask = (float) pm[ik];
++                pd[ik] = as_type<ushort>(pm[ik]) == 0xfc00 ? -INFINITY : score + mask;
+             }
+         }
+     }
+diff --git a/tests/test-backend-ops.cpp b/tests/test-backend-ops.cpp
+index e4ebd7c..66efaa5 100644
+--- a/tests/test-backend-ops.cpp
++++ b/tests/test-backend-ops.cpp
+@@ -34,6 +34,7 @@
+ #include <future>
+ #include <fstream>
+ #include <memory>
++#include <limits>
+ #include <mutex>
+ #include <random>
+ #include <regex>
+@@ -9157,9 +9158,10 @@ struct test_lightning_indexer : public test_case {
+     const int64_t nm; // ne[3] of mask
+ 
+     const ggml_type type_K;
++    const int mask_pattern; // 0: random, 1: visible, 2: equal sessions, 4: mixed
+ 
+     std::string vars() override {
+-        return VARS_TO_STR7(hsk, nh, kv, nb, ns, nm, type_K);
++        return VARS_TO_STR8(hsk, nh, kv, nb, ns, nm, type_K, mask_pattern);
+     }
+ 
+     double max_nmse_err() override {
+@@ -9171,8 +9173,8 @@ struct test_lightning_indexer : public test_case {
+         return ((2 * hsk + 2) * nh + 1) * kv * nb * ns;
+     }
+ 
+-    test_lightning_indexer(int64_t hsk = 128, int64_t nh = 64, int64_t kv = 256, int64_t nb = 128, int64_t ns = 1, int64_t nm = 1, ggml_type type_K = GGML_TYPE_F16)
+-        : hsk(hsk), nh(nh), kv(kv), nb(nb), ns(ns), nm(nm), type_K(type_K) {}
++    test_lightning_indexer(int64_t hsk = 128, int64_t nh = 64, int64_t kv = 256, int64_t nb = 128, int64_t ns = 1, int64_t nm = 1, ggml_type type_K = GGML_TYPE_F16, int mask_pattern = 0)
++        : hsk(hsk), nh(nh), kv(kv), nb(nb), ns(ns), nm(nm), type_K(type_K), mask_pattern(mask_pattern) {}
+ 
+     ggml_tensor * build_graph(ggml_context * ctx) override {
+         ggml_tensor * q = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, hsk, nh, nb, ns);
+@@ -9199,8 +9201,33 @@ struct test_lightning_indexer : public test_case {
+ 
+     void initialize_tensors(ggml_context * ctx) override {
+         for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
+-            if (strcmp(t->name, "m") == 0) {
++            if (strcmp(t->name, "m") == 0 && mask_pattern != 0) {
++                std::vector<ggml_fp16_t> values(kv*nb*nm);
++                for (int64_t im = 0; im < nm; ++im) {
++                    for (int64_t ib = 0; ib < nb; ++ib) {
++                        for (int64_t ik = 0; ik < kv; ++ik) {
++                            bool live = mask_pattern == 1;
++                            if (mask_pattern == 2) {
++                                // Equal disjoint session histories: exactly 1/nb of the pool per query.
++                                live = ik >= ib*kv/nb && ik < (ib + 1)*kv/nb;
++                            } else if (mask_pattern == 4) {
++                                // Full hidden groups, hidden queries within live groups, mixed tiles and tails.
++                                live = ib >= 8 && (ib + im)%3 != 0 && (((ik + 16*im)%64 >= 1 && (ik + 16*im)%64 < 32) || ik == kv - 1);
++                            }
++                            values[(im*nb + ib)*kv + ik] = ggml_fp32_to_fp16(live ? ((ik + im)%2 ? -0.25f : 0.25f) : -INFINITY);
++                        }
++                    }
++                }
++                ggml_backend_tensor_set(t, values.data(), 0, values.size()*sizeof(ggml_fp16_t));
++            } else if (strcmp(t->name, "m") == 0) {
+                 init_tensor_kq_mask(t);
++            } else if (mask_pattern >= 1 && mask_pattern <= 2 && t->type == GGML_TYPE_F32) {
++                // Use deterministic finite inputs for reproducible benchmarks.
++                std::vector<float> values(ggml_nelements(t));
++                for (size_t i = 0; i < values.size(); ++i) {
++                    values[i] = float(int(i%17) - 8)/16.0f;
++                }
++                ggml_backend_tensor_set(t, values.data(), 0, values.size()*sizeof(float));
+             } else {
+                 init_tensor_uniform(t);
+             }
+@@ -9208,6 +9235,34 @@ struct test_lightning_indexer : public test_case {
+     }
+ };
+ 
++// Finite FP32 keys can overflow Metal's half staging while CPU arithmetic stays finite before masking.
++struct test_lightning_indexer_overflow : public test_lightning_indexer {
++    test_lightning_indexer_overflow(int64_t nh, int64_t kv, int64_t nb)
++        : test_lightning_indexer(128, nh, kv, nb, 1, 1, GGML_TYPE_F32) {}
++
++    std::string vars() override { return test_lightning_indexer::vars() + ",finite_overflow=1"; }
++
++    void initialize_tensors(ggml_context * ctx) override {
++        for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != nullptr; t = ggml_get_next_tensor(ctx, t)) {
++            if (strcmp(t->name, "m") == 0) {
++                std::vector<ggml_fp16_t> values(kv*nb, ggml_fp32_to_fp16(-INFINITY));
++                for (int64_t ib = 0; ib < nb; ++ib) {
++                    for (int64_t ik = 1; ik < std::min<int64_t>(32, kv); ++ik) {
++                        values[ib*kv + ik] = ggml_fp32_to_fp16(-0.25f);
++                    }
++                }
++                ggml_backend_tensor_set(t, values.data(), 0, ggml_nbytes(t));
++            } else {
++                std::vector<float> values(ggml_nelements(t), 1.0f);
++                if (strcmp(t->name, "k") == 0) {
++                    std::fill(values.begin(), values.begin() + hsk, 100000.0f);
++                }
++                ggml_backend_tensor_set(t, values.data(), 0, ggml_nbytes(t));
++            }
++        }
++    }
++};
++
+ // GGML_OP_TOP_K_MASK
+ struct test_top_k_mask : public test_case {
+     const ggml_type type;
+@@ -12614,6 +12669,23 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
+         }
+     }
+ 
++    for (int kv : { 63, 65, 193 }) {
++        for (int bs : { 7, 9, 20 }) {
++            for (int nm : { 1, 4 }) {
++                for (ggml_type type_K : {GGML_TYPE_F32, GGML_TYPE_F16, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q5_1, GGML_TYPE_Q5_0, GGML_TYPE_Q4_1, GGML_TYPE_Q4_0}) {
++                    test_cases.emplace_back(new test_lightning_indexer(128, 4, kv, bs, 4, nm, type_K, 4));
++                }
++            }
++        }
++    }
++    for (int nh : { 4, 32 }) {
++        for (int kv : { 63, 65, 193 }) {
++            for (int bs : { 1, 7, 17 }) {
++                test_cases.emplace_back(new test_lightning_indexer_overflow(nh, kv, bs));
++            }
++        }
++    }
++
+     return test_cases;
+ }
+ #ifdef _MSC_VER
+@@ -13145,6 +13217,14 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
+         }
+     }
+ 
++    // Fully visible control and equal session histories.
++    // Nominal FLOP/s includes masked work; it is not executed throughput.
++    for (int bs : { 1, 16 }) {
++        for (int mask_pattern : { 1, 2 }) {
++            test_cases.emplace_back(new test_lightning_indexer(128, 32, 32768, bs, 1, 1, GGML_TYPE_F32, mask_pattern));
++        }
++    }
++
+     // top_k_mask, Flash-Next QSA shapes: 512 pools of 4 + a 3-cell tail, and DSA shapes: 2048 cells
+     for (int64_t n_kv : { 18432, 131072 }) {
+         for (int64_t nb : { 1, 2048 }) {
+@@ -13324,6 +13404,91 @@ static bool run_fa_vec_slice(ggml_backend_t backend, ggml_backend_t backend_cpu,
+     return n_fail == 0;
+ }
+ 
++// Check Metal's exact -inf exclusion with explicit outputs; CPU is not an exceptional-value oracle.
++static bool run_metal_indexer_exclusion(ggml_backend_t backend, const char * op_names_filter,
++                                        const char * params_filter, printer * output_printer) {
++    auto * reg = ggml_backend_dev_backend_reg(ggml_backend_get_device(backend));
++    if (strcmp(ggml_backend_reg_name(reg), "MTL") != 0) {
++        return true;
++    }
++    if (!op_names_filter_selects(op_names_filter, "LIGHTNING_INDEXER")) {
++        return true;
++    }
++    bool all_ok = true;
++    size_t n_run = 0, n_fail = 0;
++    for (int nh : { 4, 32 }) {
++        for (int kv : { 63, 65, 193 }) {
++            for (int nb : { 1, 7, 9, 20 }) {
++                for (int exceptional : { 1, 2, 3, 4 }) {
++                    std::string vars = VARS_TO_STR4(nh, kv, nb, exceptional) + ",metal_exclusion=1";
++                    if (params_filter && !std::regex_search(vars, std::regex(params_filter))) {
++                        continue;
++                    }
++                    ggml_init_params params = {ggml_tensor_overhead()*16 + ggml_graph_overhead(), nullptr, true};
++                    ggml_context_ptr ctx(ggml_init(params));
++                    ggml_tensor * q = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, 128, nh, nb, 1);
++                    ggml_tensor * k = ggml_new_tensor_4d(ctx.get(), GGML_TYPE_F32, 128, 1, kv, 1);
++                    ggml_tensor * w = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, nh, nb);
++                    ggml_tensor * m = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F16, kv, nb);
++                    ggml_tensor * before = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, 1024);
++                    ggml_tensor * out = ggml_lightning_indexer(ctx.get(), q, k, w, m);
++                    ggml_tensor * after = ggml_new_tensor_1d(ctx.get(), GGML_TYPE_F32, 1024);
++                    ggml_backend_buffer_ptr buf(ggml_backend_alloc_ctx_tensors(ctx.get(), backend));
++                    if (!buf) {
++                        return false;
++                    }
++                    GGML_ASSERT((char *) before->data + ggml_nbytes(before) == (char *) out->data);
++                    GGML_ASSERT((char *) out->data + GGML_PAD(ggml_nbytes(out), ggml_backend_get_alignment(backend)) == (char *) after->data);
++                    std::vector<float> qv(128*nh*nb, 1.0f), kvals(128*kv, 1.0f), wv(nh*nb, 1.0f);
++                    const float corrupt = exceptional == 1 ? 100000.0f : exceptional == 2 ? INFINITY : std::numeric_limits<float>::quiet_NaN();
++                    std::fill(kvals.begin(), kvals.begin() + 128, corrupt);
++                    std::vector<ggml_fp16_t> mv(kv*nb);
++                    std::vector<float> expected(kv*nb);
++                    for (int ib = 0; ib < nb; ++ib) {
++                        const bool hidden = nb == 1 || ib < 8 || ib%3 == 0;
++                        if (exceptional == 4 && hidden) {
++                            std::fill(wv.begin() + ib*nh, wv.begin() + (ib + 1)*nh, corrupt);
++                        }
++                        for (int ik = 0; ik < kv; ++ik) {
++                            // key 0 is always hidden; full hidden tiles and an active final tail.
++                            const bool live = !hidden && ((ik > 0 && ik < 32) || ik == kv - 1);
++                            const float mask = live ? -0.25f : -INFINITY;
++                            mv[ib*kv + ik] = ggml_fp32_to_fp16(mask);
++                            expected[ib*kv + ik] = live ? float(128*nh) + mask : -INFINITY;
++                        }
++                    }
++                    std::vector<float> guard(1024, 12345.0f), poison(kv*nb, 12345.0f);
++                    ggml_backend_tensor_set(before, guard.data(), 0, ggml_nbytes(before));
++                    ggml_backend_tensor_set(after, guard.data(), 0, ggml_nbytes(after));
++                    ggml_backend_tensor_set(q, qv.data(), 0, ggml_nbytes(q));
++                    ggml_backend_tensor_set(k, kvals.data(), 0, ggml_nbytes(k));
++                    ggml_backend_tensor_set(w, wv.data(), 0, ggml_nbytes(w));
++                    ggml_backend_tensor_set(m, mv.data(), 0, ggml_nbytes(m));
++                    ggml_backend_tensor_set(out, poison.data(), 0, ggml_nbytes(out));
++                    ggml_cgraph * graph = ggml_new_graph(ctx.get());
++                    ggml_build_forward_expand(graph, out);
++                    bool ok = ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS;
++                    std::vector<float> observed(kv*nb), observed_guard(1024);
++                    ggml_backend_tensor_get(out, observed.data(), 0, ggml_nbytes(out));
++                    ok &= memcmp(observed.data(), expected.data(), ggml_nbytes(out)) == 0;
++                    ggml_backend_tensor_get(before, observed_guard.data(), 0, ggml_nbytes(before));
++                    ok &= observed_guard == guard;
++                    ggml_backend_tensor_get(after, observed_guard.data(), 0, ggml_nbytes(after));
++                    ok &= observed_guard == guard;
++                    test_result result(ggml_backend_name(backend), "LIGHTNING_INDEXER", vars, "test", true, ok,
++                                       ok ? "" : "Metal exclusion output/sentinel mismatch");
++                    print_test_result_locked(output_printer, result);
++                    all_ok &= ok;
++                    ++n_run;
++                    n_fail += !ok;
++                }
++            }
++        }
++    }
++    printf("  Metal indexer exclusion: %zu cases run, %zu failed\n", n_run, n_fail);
++    return all_ok;
++}
++
+ static bool test_backend(ggml_backend_t backend, ggml_backend_dev_t dev, test_mode mode, const char * op_names_filter, const char * params_filter,
+                          printer * output_printer, const char * test_file_path, int parallel_workers) {
+     auto filter_test_cases = [](std::vector<std::unique_ptr<test_case>> & test_cases, const char * params_filter) {
+@@ -13463,7 +13628,8 @@ static bool test_backend(ggml_backend_t backend, ggml_backend_dev_t dev, test_mo
+ 
+         const bool slice_ok = run_fa_vec_slice(backend, backend_cpu.get(), op_names_filter);
+ 
+-        return n_ok == tests_run && slice_ok;
++        const bool exclusion_ok = run_metal_indexer_exclusion(backend, op_names_filter, params_filter, output_printer);
++        return n_ok == tests_run && slice_ok && exclusion_ok;
+     }
+ 
+     if (mode == MODE_GRAD) {

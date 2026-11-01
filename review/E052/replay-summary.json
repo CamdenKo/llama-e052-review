@@ -1,0 +1,153 @@
+{
+  "candidate": "C Metal-only; identities from runtime.json and bindings.json, not inherited analysis revision label",
+  "rows": [
+    {
+      "batch": 1,
+      "context": 32768,
+      "numerical_pass": true,
+      "import_fidelity_pass": true,
+      "all_qualification_gates_pass": true,
+      "paired_geomean_speedup": 0.9965699637555344,
+      "conditional95_speedup": [
+        0.9920768340843998,
+        1.0010834428729498
+      ],
+      "b1_regression_control": {
+        "applies": true,
+        "point_patched_latency_regression": 0.003441841886885344,
+        "adverse_95_endpoint_patched_latency_regression": 0.007986443835181989,
+        "point_exceeds_3pct": false,
+        "adverse_95_endpoint_exceeds_3pct": false
+      },
+      "latency_reduction_percent": -0.3441841886885344,
+      "conditional95_latency_reduction_percent": [
+        -0.7986443835181989,
+        0.10822702949121465
+      ],
+      "arms": {
+        "native": {
+          "median_ms": 1.6303325039370078,
+          "range_ms": [
+            1.6255153543307086,
+            1.6316335118110237
+          ],
+          "values_ms": [
+            1.6316335118110237,
+            1.6287142755905513,
+            1.6255153543307086,
+            1.6303325039370078,
+            1.6304338818897637
+          ],
+          "gpu_mhz_range": [
+            1616.0,
+            1617.0
+          ],
+          "gpu_w_range": [
+            39.78889305159436,
+            40.43604380591238
+          ],
+          "pageins": 0,
+          "peak_footprint_bytes": 618978648
+        },
+        "patched": {
+          "median_ms": 1.635025811023622,
+          "range_ms": [
+            1.6288475826771653,
+            1.6418835748031495
+          ],
+          "values_ms": [
+            1.6315546614173229,
+            1.6373818031496064,
+            1.635025811023622,
+            1.6288475826771653,
+            1.6418835748031495
+          ],
+          "gpu_mhz_range": [
+            1613.4180599084511,
+            1617.029534282812
+          ],
+          "gpu_w_range": [
+            39.79061198169022,
+            40.401724047049086
+          ],
+          "pageins": 0,
+          "peak_footprint_bytes": 619634032
+        }
+      }
+    },
+    {
+      "batch": 16,
+      "context": 32768,
+      "numerical_pass": true,
+      "import_fidelity_pass": true,
+      "all_qualification_gates_pass": true,
+      "paired_geomean_speedup": 1.125537954494038,
+      "conditional95_speedup": [
+        1.106746690988974,
+        1.1446482716606057
+      ],
+      "b1_regression_control": {
+        "applies": false,
+        "point_patched_latency_regression": -0.11153595842129638,
+        "adverse_95_endpoint_patched_latency_regression": -0.09645087883080694,
+        "point_exceeds_3pct": false,
+        "adverse_95_endpoint_exceeds_3pct": false
+      },
+      "latency_reduction_percent": 11.153595842129638,
+      "conditional95_latency_reduction_percent": [
+        9.645087883080695,
+        12.63691871484297
+      ],
+      "arms": {
+        "native": {
+          "median_ms": 11.846981661417322,
+          "range_ms": [
+            11.70242868503937,
+            12.220808803149607
+          ],
+          "values_ms": [
+            11.70242868503937,
+            12.220808803149607,
+            12.164350519685039,
+            11.846981661417322,
+            11.754741818897639
+          ],
+          "gpu_mhz_range": [
+            1516.9598323773325,
+            1618.1911912397088
+          ],
+          "gpu_w_range": [
+            58.19115935434639,
+            70.52590069479822
+          ],
+          "pageins": 0,
+          "peak_footprint_bytes": 2676876168
+        },
+        "patched": {
+          "median_ms": 10.55351772440945,
+          "range_ms": [
+            10.530505606299213,
+            10.796456787401574
+          ],
+          "values_ms": [
+            10.553129078740158,
+            10.796456787401574,
+            10.591951866141732,
+            10.55351772440945,
+            10.530505606299213
+          ],
+          "gpu_mhz_range": [
+            1553.2143851313913,
+            1618.682232985015
+          ],
+          "gpu_w_range": [
+            59.833266812756776,
+            68.68420253163436
+          ],
+          "pageins": 0,
+          "peak_footprint_bytes": 2675942280
+        }
+      }
+    }
+  ]
+}

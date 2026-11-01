@@ -1,0 +1,7 @@
+{
+  "comment_only": true,
+  "diff_whitespace": "pass",
+  "patch": "patches/E052-metal-only-comment-cleanup.diff",
+  "patch_sha256": "b4023881f4207aef8c758196c0ea8580190a7457d22931ae64bbaadc0fbbbe69",
+  "performance_evidence": "Unchanged executable code; historical identities remain preserved."
+}

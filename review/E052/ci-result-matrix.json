@@ -1,0 +1,290 @@
+{
+  "source_base": "dde879bc4f954b809892fd0d660515f42536394a",
+  "patch_sha256": "b4023881f4207aef8c758196c0ea8580190a7457d22931ae64bbaadc0fbbbe69",
+  "overall": "hosted failures remain; full self-hosted drivers pass",
+  "drivers": {
+    "cpu": {
+      "exit_status": 0,
+      "elapsed_seconds": 707.9393563270569,
+      "stage_statuses": {
+        "ctest_debug": 0,
+        "ctest_release": 0,
+        "test_backend_ops": 0,
+        "test_llama_archs_models": 0,
+        "test_llama_archs_tensor_split": 0,
+        "embd_bge_small": 0,
+        "rerank_tiny": 0,
+        "test_scripts": 0,
+        "qwen3_0_6b": 0,
+        "ctest_with_model_debug": 0,
+        "ctest_with_model_release": 0
+      },
+      "ctests": {
+        "ctest_debug": {
+          "passed": 17,
+          "failed": 0
+        },
+        "ctest_release": {
+          "passed": 17,
+          "failed": 0
+        },
+        "ctest_with_model_debug": {
+          "passed": 5,
+          "failed": 0
+        },
+        "ctest_with_model_release": {
+          "passed": 5,
+          "failed": 0
+        }
+      },
+      "ppl": {
+        "bf16": {
+          "value": 9.4151,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "f16": {
+          "value": 9.4134,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q2_k": {
+          "value": 67.6993,
+          "threshold_enforced": false,
+          "threshold": null,
+          "exemption": "existing repository q2_k policy"
+        },
+        "q3_k": {
+          "value": 11.9797,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_0": {
+          "value": 10.6252,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_1": {
+          "value": 10.6418,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_k": {
+          "value": 9.8297,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_0": {
+          "value": 9.8772,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_1": {
+          "value": 9.7798,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_k": {
+          "value": 9.6992,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q6_k": {
+          "value": 9.5727,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q8_0": {
+          "value": 9.4434,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        }
+      }
+    },
+    "metal": {
+      "exit_status": 0,
+      "elapsed_seconds": 688.5481588840485,
+      "stage_statuses": {
+        "ctest_debug": 0,
+        "ctest_release": 0,
+        "test_backend_ops": 0,
+        "test_llama_archs_models": 0,
+        "test_llama_archs_tensor_split": 0,
+        "embd_bge_small": 0,
+        "rerank_tiny": 0,
+        "test_scripts": 0,
+        "qwen3_0_6b": 0,
+        "ctest_with_model_debug": 0,
+        "ctest_with_model_release": 0
+      },
+      "ctests": {
+        "ctest_debug": {
+          "passed": 18,
+          "failed": 0
+        },
+        "ctest_release": {
+          "passed": 18,
+          "failed": 0
+        },
+        "ctest_with_model_debug": {
+          "passed": 5,
+          "failed": 0
+        },
+        "ctest_with_model_release": {
+          "passed": 5,
+          "failed": 0
+        }
+      },
+      "ppl": {
+        "bf16": {
+          "value": 9.416,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "f16": {
+          "value": 9.4156,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q2_k": {
+          "value": 65.9393,
+          "threshold_enforced": false,
+          "threshold": null,
+          "exemption": "existing repository q2_k policy"
+        },
+        "q3_k": {
+          "value": 11.9477,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_0": {
+          "value": 10.6276,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_1": {
+          "value": 10.583,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q4_k": {
+          "value": 9.7992,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_0": {
+          "value": 9.8354,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_1": {
+          "value": 9.7551,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q5_k": {
+          "value": 9.624,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q6_k": {
+          "value": 9.4722,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        },
+        "q8_0": {
+          "value": 9.4153,
+          "threshold_enforced": true,
+          "threshold": 20,
+          "exemption": null
+        }
+      },
+      "logical_device_sweeps": [
+        405,
+        552,
+        698,
+        844
+      ]
+    }
+  },
+  "operators": {
+    "metal": {
+      "passed": 18866,
+      "unsupported": 8048,
+      "literal_ok_lines": 18864,
+      "interleaved_result_lines": 2,
+      "failed": 0
+    },
+    "cpu_explicit": {
+      "passed": 23579,
+      "unsupported": 3239
+    },
+    "default_cpu_driver": {
+      "executed_cpu_cases": 0,
+      "reason": "repository default skips CPU; explicit full -b CPU supplement executed separately"
+    }
+  },
+  "hosted": {
+    "continuation-hosted-full-ctest": {
+      "exit_status": 0,
+      "log": "../continuation-hosted-full-ctest.log"
+    },
+    "continuation-hosted-leaks": {
+      "exit_status": 1,
+      "log": "../continuation-hosted-leaks.log",
+      "leaks": [
+        {
+          "count": 1,
+          "bytes": 80
+        }
+      ]
+    },
+    "continuation-hosted-autorelease": {
+      "exit_status": 1,
+      "log": "../continuation-hosted-autorelease.log",
+      "warning_classes": [
+        "__NSCFString",
+        "__NSSingleEntryDictionaryI"
+      ]
+    },
+    "continuation-native-hosted-leaks": {
+      "exit_status": 1,
+      "log": "../continuation-native-hosted-leaks.log",
+      "leaks": [
+        {
+          "count": 1,
+          "bytes": 80
+        }
+      ]
+    },
+    "continuation-native-hosted-autorelease": {
+      "exit_status": 1,
+      "log": "../continuation-native-hosted-autorelease.log",
+      "warning_classes": [
+        "__NSCFString",
+        "__NSSingleEntryDictionaryI"
+      ]
+    }
+  }
+}
