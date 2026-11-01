@@ -364,6 +364,42 @@ kernel void kernel_lightning_indexer(
     const int i_kv_0   = tgpig.x*NK;            // first key of this threadgroup
     const int i_kv     = i_kv_0 + sgitg*NKPSG;  // first key of this simdgroup
 
+    // Skip hidden tiles before score arithmetic can propagate NaN/Inf or overflow during half staging.
+    const int i_batch_0 = tgpig.y*NBPTG;
+    const int n_batch   = min((int) NBPTG, args.n_batch - i_batch_0);
+
+    static_assert(NBPTG == NSG, "one simdgroup per query");
+    threadgroup bool visible[NBPTG];
+    bool live = false;
+    if (sgitg < n_batch) {
+        device const half * pm = (device const half *) (m + (i_batch_0 + sgitg)*args.nbm1 + (i_stream % args.mask_ne3)*args.nbm3);
+        for (short ik = tiisg; ik < NK; ik += 32) {
+            if (i_kv_0 + ik < args.n_kv) {
+                live |= as_type<ushort>(pm[i_kv_0 + ik]) != 0xfc00;
+            }
+        }
+    }
+    const bool any_live = simd_any(live);
+    if (tiisg == 0) {
+        visible[sgitg] = any_live;
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    bool tile_live = false;
+    for (short ib = 0; ib < n_batch; ++ib) {
+        tile_live |= visible[ib];
+    }
+    if (!tile_live) {
+        for (short i = tiitg; i < n_batch*NK; i += NTG) {
+            const int ik = i_kv_0 + i%NK;
+            if (ik < args.n_kv) {
+                device float * pd = (device float *) (dst + (i_batch_0 + i/NK)*args.nb1 + i_stream*args.nb3);
+                pd[ik] = -INFINITY;
+            }
+        }
+        return;
+    }
+
     threadgroup half sk[NK * DK16 * 16];
     threadgroup half4x4 * sk4x4 = (threadgroup half4x4 *) sk;
 
@@ -401,11 +437,17 @@ kernel void kernel_lightning_indexer(
     threadgroup float sw [NHPTG];
     threadgroup float sqk[NSG*NHPTG*NKPSG];
 
-    const int i_batch_0 = tgpig.y*NBPTG;
-    const int n_batch   = min((int) NBPTG, args.n_batch - i_batch_0);
-
     for (short ib = 0; ib < n_batch; ++ib) {
         const int i_batch = i_batch_0 + ib;
+
+        if (!visible[ib]) {
+            const int ik = i_kv + tiisg;
+            if (tiisg < NKPSG && ik < args.n_kv) {
+                device float * pd = (device float *) (dst + i_batch*args.nb1 + i_stream*args.nb3);
+                pd[ik] = -INFINITY;
+            }
+            continue;
+        }
 
         device const char * pq = q + i_batch*args.nbq2 + i_stream*args.nbq3;
         device const char * pw = w + i_batch*args.nbw1 + i_stream*args.nbw3;
@@ -463,7 +505,8 @@ kernel void kernel_lightning_indexer(
                 device const half  * pm = (device const half  *) (m   + i_batch*args.nbm1 + (i_stream % args.mask_ne3)*args.nbm3);
                 device       float * pd = (device       float *) (dst + i_batch*args.nb1  + i_stream*args.nb3);
 
-                pd[ik] = score + (float) pm[ik];
+                const float mask = (float) pm[ik];
+                pd[ik] = as_type<ushort>(pm[ik]) == 0xfc00 ? -INFINITY : score + mask;
             }
         }
     }
