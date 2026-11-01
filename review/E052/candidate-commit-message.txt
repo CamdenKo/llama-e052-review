@@ -1,0 +1,10 @@
+metal : prototype indexer mask exclusion and work skipping
+
+Skip fully hidden key/query tiles and force exact F16 -inf masks to
+produce -inf output, including exceptional score arithmetic. Add finite
+overflow, mixed-mask, boundary, sentinel, and performance cases.
+
+Private review candidate only. Exceptional semantics, visible-work
+regressions, target full-model validation, and human review remain open.
+
+Assisted-by: Codex
